@@ -32,23 +32,25 @@ Pandas: Manipulação e análise de dados
 Plotly: Criação de gráficos interativos
 
 📌 Pré-requisitos
-bashCopy# Instalação das dependências
-pip install streamlit pandas plotly
+Instalação das dependências
+![image](https://github.com/user-attachments/assets/a0660413-0f89-440d-9670-c03db5b9b7db)
+
 🔧 Como Usar
 
 Clone o repositório
 
-bashCopygit clone https://github.com/seu-usuario/validador-consistencia-voos.git
+git clone https://github.com/seu-usuario/validador-consistencia-voos.git
 
 Instale as dependências
 
-bashCopypip install -r requirements.txt
+pip install -r requirements.txt
 
 Execute a aplicação
 
-bashCopystreamlit run validador_consistencia_voos.py
+streamlit run validador_consistencia_voos.py
+
 📊 Formato dos Dados de Entrada
-A aplicação espera um arquivo CSV no padrão da ANAC:
+A aplicação espera um arquivo CSV RIMA(Relatório de informações e movimentações Aeroportuárias) no padrão da legislação da ANAC:
 
 
 🎯 Validações Implementadas
