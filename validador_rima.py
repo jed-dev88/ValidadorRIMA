@@ -84,7 +84,7 @@ def validate_passenger_count(df):
     df['RPE_BRANCO_VIOLATION'] = (
         (df['AERONAVE_OPERADOR'] != 'GERAL') & 
         (df['TOTAL_PAX'] == 0) & 
-        (~df['SERVICE_TYPE'].isin(['F', 'M','P','A','X']))
+        (~df['SERVICE_TYPE'].isin(['F','M','P','A','X','Y','Z']))
     )
     
     # Create operation type column
