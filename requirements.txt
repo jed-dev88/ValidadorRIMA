@@ -3,3 +3,4 @@ pandas
 datetime
 plotly
 xlsxwriter
+io
