@@ -170,7 +170,7 @@ def validate_passenger_count(df):
     df['AIRCRAFT_CAPACITY'] = df['AERONAVE_TIPO'].map(AIRCRAFT_CAPACITY)
     
     # Calculate total passengers
-    df['TOTAL_PAX'] = df['PAX_LOCAL'] + df['PAX_CONEXAO_DOMESTICO'] + df['PAX_CONEXAO_INTERNACIONAL']
+    df['TOTAL_PAX'] = df['PAX_LOCAL'].fillna(0) + df['PAX_CONEXAO_DOMESTICO'].fillna(0) + df['PAX_CONEXAO_INTERNACIONAL'].fillna(0)
     
     # Calculate occupancy rate
     df['OCCUPANCY_RATE'] = df.apply(
@@ -202,25 +202,37 @@ def validate_passenger_count(df):
     df['OPERATION_TYPE'] = df['AERONAVE_OPERADOR'].apply(
         lambda x: 'Aviação Geral' if x == 'GERAL' else 'Aviação Comercial')
     
-      # Time validations
-    # Convert date and time columns to complete datetime objects
-    df['CALCO_DATETIME'] = pd.to_datetime(
-        df['CALCO_DATA'].astype(str) + ' ' + df['CALCO_HORARIO'], 
-        format='%Y-%m-%d %H:%M', 
-        errors='coerce'
-    )
-    
-    df['TOQUE_DATETIME'] = pd.to_datetime(
-        df['CALCO_DATA'].astype(str) + ' ' + df['TOQUE_HORARIO'], 
-        format='%Y-%m-%d %H:%M', 
-        errors='coerce'
-    )
-    
-    df['PREVISTO_DATETIME'] = pd.to_datetime(
-        df['CALCO_DATA'].astype(str) + ' ' + df['PREVISTO_HORARIO'], 
-        format='%Y-%m-%d %H:%M', 
-        errors='coerce'
-    )
+    # Time validations
+    try:
+        # Convert CALCO_DATA to datetime if not already
+        if not pd.api.types.is_datetime64_any_dtype(df['CALCO_DATA']):
+            df['CALCO_DATA'] = pd.to_datetime(df['CALCO_DATA'], format='%d/%m/%Y', errors='coerce')
+        
+        # Handle time columns separately
+        df['CALCO_DATETIME'] = pd.to_datetime(df['CALCO_DATA'].dt.strftime('%Y-%m-%d') + ' ' + 
+                                            df['CALCO_HORARIO'].astype(str).str.zfill(4).str[:2] + ':' + 
+                                            df['CALCO_HORARIO'].astype(str).str.zfill(4).str[2:], 
+                                            format='%Y-%m-%d %H:%M', 
+                                            errors='coerce')
+        
+        df['TOQUE_DATETIME'] = pd.to_datetime(df['CALCO_DATA'].dt.strftime('%Y-%m-%d') + ' ' + 
+                                            df['TOQUE_HORARIO'].astype(str).str.zfill(4).str[:2] + ':' + 
+                                            df['TOQUE_HORARIO'].astype(str).str.zfill(4).str[2:], 
+                                            format='%Y-%m-%d %H:%M', 
+                                            errors='coerce')
+        
+        df['PREVISTO_DATETIME'] = pd.to_datetime(df['CALCO_DATA'].dt.strftime('%Y-%m-%d') + ' ' + 
+                                               df['PREVISTO_HORARIO'].astype(str).str.zfill(4).str[:2] + ':' + 
+                                               df['PREVISTO_HORARIO'].astype(str).str.zfill(4).str[2:], 
+                                               format='%Y-%m-%d %H:%M', 
+                                               errors='coerce')
+
+    except Exception as e:
+        print(f"Erro ao converter datas: {e}")
+        # Set default values if conversion fails
+        df['CALCO_DATETIME'] = pd.NaT
+        df['TOQUE_DATETIME'] = pd.NaT
+        df['PREVISTO_DATETIME'] = pd.NaT
 
     # Time sequence validation for arrivals (P) and departures (D)
     df['TIME_SEQUENCE_VIOLATION'] = False
@@ -239,7 +251,8 @@ def validate_passenger_count(df):
         axis=1
     )
 
-    return df
+    return df  
+
 
 
 def create_operations_chart(operations_by_date):
