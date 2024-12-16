@@ -544,6 +544,14 @@ def create_geral_validation_chart(df):
     return fig, geral_flights[geral_flights['TOTAL_PAX'] > 0]
 
 
+def format_number(value):
+    """Função auxiliar para formatar números com separador de milhar"""
+    try:
+        return '{:,.0f}'.format(value).replace(',', '.')
+    except:
+        return '0'
+
+
 def main():
     st.title('Análise de Operações e Passageiros')
     
@@ -607,7 +615,7 @@ def main():
                 total_cargo = df['CARGA'].fillna(0).sum()
                 st.metric(
                     "Total de Carga",
-                    f"{int(total_cargo):,} kg",
+                    f"{format_number(total_cargo)} kg",
                     delta=None
                 )
             with col4:
@@ -615,7 +623,7 @@ def main():
                 total_mail = df['CORREIO'].fillna(0).sum()
                 st.metric(
                     "Total de Correio",
-                    f"{int(total_mail):,} kg",
+                    f"{format_number(total_mail)} kg",
                     delta=None
                 )
             
