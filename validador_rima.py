@@ -3,8 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-import io
-import xlsxwriter 
+import io 
 
 # Aircraft capacity dictionary
 AIRCRAFT_CAPACITY = {
