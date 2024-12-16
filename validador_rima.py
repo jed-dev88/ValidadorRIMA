@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
 import io
+import xlsxwriter 
 
 # Aircraft capacity dictionary
 AIRCRAFT_CAPACITY = {
@@ -25,6 +26,53 @@ AIRCRAFT_CAPACITY = {
     'A21N': 224
 }
 
+def process_flight_data(df):
+    """Process flight data and create necessary groupings for visualization."""
+    # Converte as datas para datetime usando o formato correto
+    date_cols = ['PREVISTO_DATA', 'CALCO_DATA', 'TOQUE_DATA']
+    
+    for col in date_cols:
+        # Primeiro tenta converter do formato original dd/mm/yyyy
+        df[col] = pd.to_datetime(df[col], format='%d/%m/%Y', errors='coerce')
+    
+    # Remove registros com datas inválidas
+    df = df.dropna(subset=['CALCO_DATA'])
+    
+    # Converte colunas de horário para o formato correto
+    time_cols = ['PREVISTO_HORARIO', 'CALCO_HORARIO', 'TOQUE_HORARIO']
+    for col in time_cols:
+        df[col] = pd.to_datetime(df[col].astype(str).str.zfill(4), format='%H%M', errors='coerce').dt.time
+    
+    # Group by date and operation type for operations count
+    operations_by_date = df.groupby(['CALCO_DATA', 'OPERATION_TYPE']).size().reset_index(name='OPERATIONS_COUNT')
+    
+    # Group by date for passenger count
+    passengers_by_date = df.groupby('CALCO_DATA')['TOTAL_PAX'].sum().reset_index()
+    
+    # Calculate average occupancy by aircraft type
+    occupancy_by_aircraft = df[df['AIRCRAFT_CAPACITY'].notna()].groupby('AERONAVE_TIPO').agg({
+        'OCCUPANCY_RATE': 'mean',
+        'TOTAL_PAX': 'sum',
+        'AIRCRAFT_CAPACITY': 'first'
+    }).reset_index()
+    
+    occupancy_by_aircraft = occupancy_by_aircraft.sort_values('OCCUPANCY_RATE', ascending=True)
+    
+    return operations_by_date, passengers_by_date, occupancy_by_aircraft
+
+def format_date_safely(date):
+    """Formata a data de forma segura, tratando valores nulos."""
+    try:
+        if pd.isna(date):
+            return ''
+        return date.strftime('%d/%m/%Y')
+    except:
+        return ''
+
+
+
+
+
 
 def create_violations_summary(df, airport_code):
    """Create a summary DataFrame of all violations."""
@@ -36,7 +84,7 @@ def create_violations_summary(df, airport_code):
    if not capacity_violations.empty:
        for _, row in capacity_violations.iterrows():
            summary_rows.append({
-               'Data': row['CALCO_DATA'].strftime('%d/%m/%Y'),
+               'Data': format_date_safely(row['CALCO_DATA']),
                'Tipo_Violacao': 'Capacidade',
                'Voo': row['VOO_NUMERO'],
                'Marcas': row['AERONAVE_MARCAS'],
@@ -49,7 +97,7 @@ def create_violations_summary(df, airport_code):
    if not geral_violations.empty:
        for _, row in geral_violations.iterrows():
            summary_rows.append({
-               'Data': row['CALCO_DATA'].strftime('%d/%m/%Y'),
+               'Data': format_date_safely(row['CALCO_DATA']),
                'Tipo_Violacao': 'Aviação Geral',
                'Voo': row['VOO_NUMERO'],
                'Marcas': row['AERONAVE_MARCAS'],
@@ -62,7 +110,7 @@ def create_violations_summary(df, airport_code):
    if not rpe_violations.empty:
        for _, row in rpe_violations.iterrows():
            summary_rows.append({
-               'Data': row['CALCO_DATA'].strftime('%d/%m/%Y'),
+               'Data': format_date_safely(row['CALCO_DATA']),
                'Tipo_Violacao': 'RPE em Branco',
                'Voo': row['VOO_NUMERO'],
                'Marcas': row['AERONAVE_MARCAS'],
@@ -75,7 +123,7 @@ def create_violations_summary(df, airport_code):
    if not empty_reg.empty:
        for _, row in empty_reg.iterrows():
            summary_rows.append({
-               'Data': row['CALCO_DATA'].strftime('%d/%m/%Y'),
+               'Data': format_date_safely(row['CALCO_DATA']),
                'Tipo_Violacao': 'Marcas Vazias',
                'Voo': row['VOO_NUMERO'],
                'Marcas': 'VAZIA',
@@ -88,7 +136,7 @@ def create_violations_summary(df, airport_code):
    if not time_violations.empty:
        for _, row in time_violations.iterrows():
            summary_rows.append({
-               'Data': row['CALCO_DATA'].strftime('%d/%m/%Y'),
+               'Data': format_date_safely(row['CALCO_DATA']),
                'Tipo_Violacao': 'Sequência de Horários',
                'Voo': row['VOO_NUMERO'],
                'Marcas': row['AERONAVE_MARCAS'],
@@ -194,53 +242,6 @@ def validate_passenger_count(df):
 
     return df
 
-def process_flight_data(df):
-    """Process flight data and create necessary groupings for visualization."""
-    # Função auxiliar para converter datas
-    def convert_date(date_str):
-        try:
-            # Primeiro tenta o formato padrão dd/mm/yyyy
-            return pd.to_datetime(date_str, format='%d/%m/%Y')
-        except ValueError:
-            try:
-                # Tenta o formato dd/mm/yy
-                return pd.to_datetime(date_str, format='%d/%m/%y')
-            except ValueError:
-                try:
-                    # Tenta com dayfirst=True para resolver ambiguidades
-                    return pd.to_datetime(date_str, dayfirst=True)
-                except Exception as e:
-                    st.error(f"Erro ao converter a data: {date_str}. Erro: {str(e)}")
-                    return None
-
-    # Converte a coluna de data usando a função auxiliar
-    df['CALCO_DATA'] = df['CALCO_DATA'].apply(convert_date)
-    
-    # Verifica se há alguma data inválida
-    invalid_dates = df[df['CALCO_DATA'].isna()]
-    if not invalid_dates.empty:
-        st.warning("Atenção: Foram encontradas datas inválidas nos seguintes registros:")
-        st.dataframe(invalid_dates[['CALCO_DATA', 'VOO_NUMERO', 'AERONAVE_MARCAS']])
-    
-    # Remove registros com datas inválidas para não afetar as análises
-    df = df.dropna(subset=['CALCO_DATA'])
-    
-    # Group by date and operation type for operations count
-    operations_by_date = df.groupby(['CALCO_DATA', 'OPERATION_TYPE']).size().reset_index(name='OPERATIONS_COUNT')
-    
-    # Group by date for passenger count
-    passengers_by_date = df.groupby('CALCO_DATA')['TOTAL_PAX'].sum().reset_index()
-    
-    # Calculate average occupancy by aircraft type
-    occupancy_by_aircraft = df[df['AIRCRAFT_CAPACITY'].notna()].groupby('AERONAVE_TIPO').agg({
-        'OCCUPANCY_RATE': 'mean',
-        'TOTAL_PAX': 'sum',
-        'AIRCRAFT_CAPACITY': 'first'
-    }).reset_index()
-    
-    occupancy_by_aircraft = occupancy_by_aircraft.sort_values('OCCUPANCY_RATE', ascending=True)
-    
-    return operations_by_date, passengers_by_date, occupancy_by_aircraft
 
 def create_operations_chart(operations_by_date):
     """Create the operations chart with separated operation types and improved contrast."""
@@ -604,19 +605,20 @@ def main():
 
             col3, col4 = st.columns(2)
             with col3:
-                total_cargo = df['CARGA'].sum()
+                total_cargo = df['CARGA'].fillna(0).sum()
                 st.metric(
                     "Total de Carga",
-                    f"{total_cargo:,.0f} kg",
+                    f"{int(total_cargo):,} kg",
                     delta=None
-                    )
+                )
             with col4:
-                total_mail = df['CORREIO'].sum()
+                # Corrigido para tratar valores nulos
+                total_mail = df['CORREIO'].fillna(0).sum()
                 st.metric(
                     "Total de Correio",
-                    f"{total_mail:,.0f} kg",
+                    f"{int(total_mail):,} kg",
                     delta=None
-                    )
+                )
             
             # Display operations and passengers charts
             st.plotly_chart(create_operations_chart(operations_by_date), use_container_width=True)
