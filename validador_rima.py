@@ -3,7 +3,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime
-import io 
+import io
 
 # Aircraft capacity dictionary
 AIRCRAFT_CAPACITY = {
@@ -69,100 +69,100 @@ def format_date_safely(date):
         return ''
 
 
-
-
-
-
 def create_violations_summary(df, airport_code):
-   """Create a summary DataFrame of all violations."""
-   timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-   summary_rows = []
+    """Create a summary DataFrame of all violations."""
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    summary_rows = []
+    
+    # Capacity violations
+    capacity_violations = df[df['EXCEEDS_CAPACITY']]
+    if not capacity_violations.empty:
+        for _, row in capacity_violations.iterrows():
+            summary_rows.append({
+                'Data': format_date_safely(row['CALCO_DATA']),
+                'Tipo_Violacao': 'Capacidade',
+                'Voo': row['VOO_NUMERO'],
+                'Marcas': row['AERONAVE_MARCAS'],
+                'Operador': row['AERONAVE_OPERADOR'],
+                'Detalhes': f"Excesso de {int(row['TOTAL_PAX'] - row['AIRCRAFT_CAPACITY'])} passageiros"
+            })
    
-   # Capacity violations
-   capacity_violations = df[df['EXCEEDS_CAPACITY']]
-   if not capacity_violations.empty:
-       for _, row in capacity_violations.iterrows():
-           summary_rows.append({
-               'Data': format_date_safely(row['CALCO_DATA']),
-               'Tipo_Violacao': 'Capacidade',
-               'Voo': row['VOO_NUMERO'],
-               'Marcas': row['AERONAVE_MARCAS'],
-               'Operador': row['AERONAVE_OPERADOR'],
-               'Detalhes': f"Excesso de {int(row['TOTAL_PAX'] - row['AIRCRAFT_CAPACITY'])} passageiros"
-           })
-   
-   # GERAL violations
-   geral_violations = df[df['GERAL_PAX_VIOLATION']]
-   if not geral_violations.empty:
-       for _, row in geral_violations.iterrows():
-           summary_rows.append({
-               'Data': format_date_safely(row['CALCO_DATA']),
-               'Tipo_Violacao': 'Aviação Geral',
-               'Voo': row['VOO_NUMERO'],
-               'Marcas': row['AERONAVE_MARCAS'],
-               'Operador': row['AERONAVE_OPERADOR'],
-               'Detalhes': f"Total PAX: {int(row['TOTAL_PAX'])}"
-           })
-   
-   # RPE em Branco violations
-   rpe_violations = df[df['RPE_BRANCO_VIOLATION']]
-   if not rpe_violations.empty:
-       for _, row in rpe_violations.iterrows():
-           summary_rows.append({
-               'Data': format_date_safely(row['CALCO_DATA']),
-               'Tipo_Violacao': 'RPE em Branco',
-               'Voo': row['VOO_NUMERO'],
-               'Marcas': row['AERONAVE_MARCAS'],
-               'Operador': row['AERONAVE_OPERADOR'],
-               'Detalhes': 'Voo comercial sem passageiros'
-           })
-   
-   # Empty registration violations
-   empty_reg = df[df['EMPTY_REGISTRATION_VIOLATION']]
-   if not empty_reg.empty:
-       for _, row in empty_reg.iterrows():
-           summary_rows.append({
-               'Data': format_date_safely(row['CALCO_DATA']),
-               'Tipo_Violacao': 'Marcas Vazias',
-               'Voo': row['VOO_NUMERO'],
-               'Marcas': 'VAZIA',
-               'Operador': row['AERONAVE_OPERADOR'],
-               'Detalhes': 'Aeronave sem marcas'
-           })
-   
-   # Time sequence violations
-   time_violations = df[df['TIME_SEQUENCE_VIOLATION']]
-   if not time_violations.empty:
-       for _, row in time_violations.iterrows():
-           summary_rows.append({
-               'Data': format_date_safely(row['CALCO_DATA']),
-               'Tipo_Violacao': 'Sequência de Horários',
-               'Voo': row['VOO_NUMERO'],
-               'Marcas': row['AERONAVE_MARCAS'],
-               'Operador': row['AERONAVE_OPERADOR'],
-               'Detalhes': f"Movimento {row['MOVIMENTO_TIPO']} - Calco: {row['CALCO_HORARIO']}, Toque: {row['TOQUE_HORARIO']}"
-           })
-   
-   summary_df = pd.DataFrame(summary_rows)
-   
-   if not summary_df.empty:
-       stats_df = pd.DataFrame([
-           {'Estatística': 'Total de Violações', 'Valor': len(summary_df)},
-           {'Estatística': 'Violações de Capacidade', 'Valor': len(df[df['EXCEEDS_CAPACITY']])},
-           {'Estatística': 'Violações Aviação Geral', 'Valor': len(df[df['GERAL_PAX_VIOLATION']])},
-           {'Estatística': 'RPE em Branco', 'Valor': len(df[df['RPE_BRANCO_VIOLATION']])},
-           {'Estatística': 'Marcas Vazias', 'Valor': len(df[df['EMPTY_REGISTRATION_VIOLATION']])},
-           {'Estatística': 'Violações de Horário', 'Valor': len(df[df['TIME_SEQUENCE_VIOLATION']])}
-       ])
-       
-       output = io.BytesIO()
-       with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-           summary_df.to_excel(writer, sheet_name='Violações', index=False)
-           stats_df.to_excel(writer, sheet_name='Estatísticas', index=False)
-       
-       return output.getvalue()
-   
-   return None
+    # GERAL violations
+    geral_violations = df[df['GERAL_PAX_VIOLATION']]
+    if not geral_violations.empty:
+        for _, row in geral_violations.iterrows():
+            summary_rows.append({
+                'Data': format_date_safely(row['CALCO_DATA']),
+                'Tipo_Violacao': 'Aviação Geral',
+                'Voo': row['VOO_NUMERO'],
+                'Marcas': row['AERONAVE_MARCAS'],
+                'Operador': row['AERONAVE_OPERADOR'],
+                'Detalhes': f"Total PAX: {int(row['TOTAL_PAX'])}"
+            })
+    
+    # RPE em Branco violations
+    rpe_violations = df[df['RPE_BRANCO_VIOLATION']]
+    if not rpe_violations.empty:
+        for _, row in rpe_violations.iterrows():
+            summary_rows.append({
+                'Data': format_date_safely(row['CALCO_DATA']),
+                'Tipo_Violacao': 'RPE em Branco',
+                'Voo': row['VOO_NUMERO'],
+                'Marcas': row['AERONAVE_MARCAS'],
+                'Operador': row['AERONAVE_OPERADOR'],
+                'Detalhes': 'Voo comercial sem passageiros'
+            })
+    
+    # Empty registration violations
+    empty_reg = df[df['EMPTY_REGISTRATION_VIOLATION']]
+    if not empty_reg.empty:
+        for _, row in empty_reg.iterrows():
+            summary_rows.append({
+                'Data': format_date_safely(row['CALCO_DATA']),
+                'Tipo_Violacao': 'Marcas Vazias',
+                'Voo': row['VOO_NUMERO'],
+                'Marcas': 'VAZIA',
+                'Operador': row['AERONAVE_OPERADOR'],
+                'Detalhes': 'Aeronave sem marcas'
+            })
+
+    # Time sequence violations
+    time_violations = df[df['TIME_SEQUENCE_VIOLATION']]
+    if not time_violations.empty:
+        for _, row in time_violations.iterrows():
+            summary_rows.append({
+                'Data': format_date_safely(row['CALCO_DATA']),
+                'Tipo_Violacao': 'Sequência de Horários',
+                'Voo': row['VOO_NUMERO'],
+                'Marcas': row['AERONAVE_MARCAS'],
+                'Operador': row['AERONAVE_OPERADOR'],
+                'Detalhes': f"Movimento {row['MOVIMENTO_TIPO']} - Calco: {row['CALCO_HORARIO']}, Toque: {row['TOQUE_HORARIO']}"
+            })
+    
+    summary_df = pd.DataFrame(summary_rows)
+    
+    if not summary_df.empty:
+        # Criar as estatísticas
+        stats_df = pd.DataFrame([
+            {'Estatística': 'Total de Violações', 'Valor': len(summary_df)},
+            {'Estatística': 'Violações de Capacidade', 'Valor': len(df[df['EXCEEDS_CAPACITY']])},
+            {'Estatística': 'Violações Aviação Geral', 'Valor': len(df[df['GERAL_PAX_VIOLATION']])},
+            {'Estatística': 'RPE em Branco', 'Valor': len(df[df['RPE_BRANCO_VIOLATION']])},
+            {'Estatística': 'Marcas Vazias', 'Valor': len(df[df['EMPTY_REGISTRATION_VIOLATION']])},
+            {'Estatística': 'Violações de Horário', 'Valor': len(df[df['TIME_SEQUENCE_VIOLATION']])}
+        ])
+        
+        # Concatenar os DataFrames com uma linha em branco entre eles
+        final_df = pd.concat([
+            summary_df,
+            pd.DataFrame([{'Data': '', 'Tipo_Violacao': '', 'Voo': '', 'Marcas': '', 'Operador': '', 'Detalhes': ''}]),
+            stats_df.rename(columns={'Estatística': 'Data', 'Valor': 'Detalhes'})
+        ])
+        
+        # Converter para CSV
+        return final_df.to_csv(index=False).encode('utf-8')
+    
+    return None
 
 def validate_passenger_count(df):
     """Validate passenger counts and all other validations."""
@@ -580,8 +580,8 @@ def main():
             st.download_button(
                 label="📥 Baixar Resumo de Violações",
                 data=summary_data,
-                file_name=f"violacoes_{airport_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                file_name=f"violacoes_{airport_code}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
             )
         
         with tab1:
