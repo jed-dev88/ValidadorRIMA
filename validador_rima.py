@@ -24,6 +24,110 @@ AIRCRAFT_CAPACITY = {
     'A21N': 224
 }
 
+def format_date(date_val):
+    """Helper function to safely format dates"""
+    try:
+        if isinstance(date_val, str):
+            return pd.to_datetime(date_val).strftime('%d/%m/%Y')
+        elif pd.notna(date_val):
+            return date_val.strftime('%d/%m/%Y')
+        return ''
+    except:
+        return str(date_val)
+
+def generate_validation_report(df):
+    """
+    Generate a text report summarizing all validations.
+    """
+    report = []
+    
+    # Cabeçalho
+    report.append("RELATÓRIO DE VALIDAÇÕES")
+    report.append("=" * 50)
+    report.append("")
+
+    # 1. Resumo Geral
+    report.append("1. RESUMO GERAL")
+    report.append("-" * 20)
+    total_flights = len(df)
+    report.append(f"Total de Operações: {total_flights}")
+    report.append(f"Total de Passageiros: {int(df['TOTAL_PAX'].sum()):,}")
+    report.append("")
+
+    # 2. Validação de Capacidade
+    report.append("2. VALIDAÇÃO DE CAPACIDADE")
+    report.append("-" * 20)
+    capacity_violations = df[df['EXCEEDS_CAPACITY']].copy()
+    report.append(f"Total de violações: {len(capacity_violations)}")
+    if not capacity_violations.empty:
+        report.append("\nDetalhamento das violações de capacidade:")
+        for _, row in capacity_violations.iterrows():
+            excesso = row['TOTAL_PAX'] - row['AIRCRAFT_CAPACITY']
+            report.append(
+                f"Voo: {row['VOO_NUMERO']} - "
+                f"Data: {row['CALCO_DATA'].strftime('%d/%m/%Y')} - "
+                f"Aeronave: {row['AERONAVE_TIPO']} - "
+                f"Capacidade: {row['AIRCRAFT_CAPACITY']} - "
+                f"Total PAX: {row['TOTAL_PAX']} - "
+                f"Excesso: {excesso}"
+            )
+    report.append("")
+
+    # 3. Validação Aviação Geral
+    report.append("3. VALIDAÇÃO AVIAÇÃO GERAL")
+    report.append("-" * 20)
+    geral_violations = df[df['GERAL_PAX_VIOLATION']].copy()
+    report.append(f"Total de violações: {len(geral_violations)}")
+    if not geral_violations.empty:
+        report.append("\nDetalhamento das violações de aviação geral:")
+        for _, row in geral_violations.iterrows():
+            report.append(
+                f"Voo: {row['VOO_NUMERO']} - "
+                f"Data: {row['CALCO_DATA'].strftime('%d/%m/%Y')} - "
+                f"Total PAX: {row['TOTAL_PAX']}"
+            )
+    report.append("")
+
+    # 4. Validação RPE em Branco
+    report.append("4. VALIDAÇÃO RPE EM BRANCO")
+    report.append("-" * 20)
+    rpe_violations = df[df['RPE_BRANCO_VIOLATION']].copy()
+    report.append(f"Total de violações: {len(rpe_violations)}")
+    if not rpe_violations.empty:
+        report.append("\nDetalhamento das violações de RPE em branco:")
+        for _, row in rpe_violations.iterrows():
+            report.append(
+                f"Voo: {row['VOO_NUMERO']} - "
+                f"Data: {row['CALCO_DATA'].strftime('%d/%m/%Y')} - "
+                f"Operador: {row['AERONAVE_OPERADOR']}"
+            )
+    report.append("")
+
+    # 5. Validação de Horários
+    report.append("5. VALIDAÇÃO DE HORÁRIOS")
+    report.append("-" * 20)
+    time_violations = df[df['HORARIO_INVALIDO']].copy()
+    report.append(f"Total de violações: {len(time_violations)}")
+    if not time_violations.empty:
+        report.append("\nDetalhamento das violações de horário:")
+        for _, row in time_violations.iterrows():
+            report.append(
+                f"Voo: {row['VOO_NUMERO']} - "
+                f"Data: {row['CALCO_DATA'].strftime('%d/%m/%Y')} - "
+                f"Tipo: {row['MOVIMENTO_TIPO']} - "
+                f"Erro: {row['ERRO_VALIDACAO']}"
+            )
+    report.append("")
+
+    # 6. Estatísticas Finais
+    report.append("6. ESTATÍSTICAS FINAIS")
+    report.append("-" * 20)
+    report.append(f"Percentual de voos com alguma violação: {(len(df[df['EXCEEDS_CAPACITY'] | df['GERAL_PAX_VIOLATION'] | df['RPE_BRANCO_VIOLATION'] | df['HORARIO_INVALIDO']]) / len(df) * 100):.1f}%")
+    
+    # Retorna o relatório como uma única string
+    return "\n".join(report)
+
+
 def validate_passenger_count(df):
     """Validate passenger counts and add necessary columns for analysis."""
     # Add capacity column based on aircraft type
@@ -153,6 +257,7 @@ def create_operations_chart(operations_by_date):
         title='Operações Diárias por Tipo',
         template="plotly_white",
         barmode='stack',
+        text='OPERATIONS_COUNT',
         color_discrete_map={
             'Aviação Comercial': '#2E86C1',
             'Aviação Geral': '#E67E22'
@@ -169,6 +274,144 @@ def create_operations_chart(operations_by_date):
         yaxis_title="Número de Operações"
     )
 
+    fig.update_traces(
+        textposition='inside',
+        texttemplate='%{text:,.0f}'
+    )
+
+    return fig
+
+def validate_movement_times(df):
+    """
+    Validate movement times based on MOVIMENTO_TIPO:
+    - For 'P' (landing): CALCO time should be after TOQUE time
+    - For 'D' (takeoff): CALCO time should be before TOQUE time
+    """
+    # Create a copy to avoid modifying the original dataframe
+    df = df.copy()
+    
+    # Function to parse date and time strings
+    def parse_datetime(date_str, time_str):
+        try:
+            if pd.isna(date_str) or pd.isna(time_str):
+                return None
+                
+            # Convert date string to datetime if it's a string
+            if isinstance(date_str, str):
+                try:
+                    date_obj = pd.to_datetime(date_str, format='%d/%m/%Y')
+                except:
+                    try:
+                        date_obj = pd.to_datetime(date_str)
+                    except:
+                        return None
+            else:
+                date_obj = date_str
+                
+            # Parse time string
+            try:
+                time_parts = time_str.split(':')
+                hour = int(time_parts[0])
+                minute = int(time_parts[1])
+                second = int(time_parts[2]) if len(time_parts) > 2 else 0
+                
+                # Create full datetime
+                full_datetime = pd.Timestamp.combine(
+                    date_obj.date(),
+                    pd.Timestamp.min.time().replace(hour=hour, minute=minute, second=second)
+                )
+                return full_datetime
+            except:
+                return None
+                
+        except Exception as e:
+            return None
+
+    # Create datetime columns for comparison
+    df['CALCO_DATETIME'] = df.apply(
+        lambda row: parse_datetime(row['CALCO_DATA'], row['CALCO_HORARIO']), 
+        axis=1
+    )
+    
+    df['TOQUE_DATETIME'] = df.apply(
+        lambda row: parse_datetime(row['TOQUE_DATA'], row['TOQUE_HORARIO']), 
+        axis=1
+    )
+
+    # Initialize validation columns
+    df['HORARIO_INVALIDO'] = False
+    df['ERRO_VALIDACAO'] = ''
+
+    # Validate based on movement type
+    # For landings (P)
+    landing_mask = (df['MOVIMENTO_TIPO'] == 'P') & df['CALCO_DATETIME'].notna() & df['TOQUE_DATETIME'].notna()
+    df.loc[landing_mask, 'HORARIO_INVALIDO'] = df.loc[landing_mask, 'CALCO_DATETIME'] < df.loc[landing_mask, 'TOQUE_DATETIME']
+    df.loc[landing_mask & df['HORARIO_INVALIDO'], 'ERRO_VALIDACAO'] = 'Calço anterior ao Toque em Pouso'
+
+    # For takeoffs (D)
+    takeoff_mask = (df['MOVIMENTO_TIPO'] == 'D') & df['CALCO_DATETIME'].notna() & df['TOQUE_DATETIME'].notna()
+    df.loc[takeoff_mask, 'HORARIO_INVALIDO'] = df.loc[takeoff_mask, 'CALCO_DATETIME'] > df.loc[takeoff_mask, 'TOQUE_DATETIME']
+    df.loc[takeoff_mask & df['HORARIO_INVALIDO'], 'ERRO_VALIDACAO'] = 'Calço posterior ao Toque em Decolagem'
+
+    # Mark missing datetime information
+    missing_times = (
+        (df['CALCO_DATETIME'].isna() | df['TOQUE_DATETIME'].isna()) & 
+        df['MOVIMENTO_TIPO'].isin(['P', 'D'])
+    )
+    df.loc[missing_times, 'HORARIO_INVALIDO'] = True
+    df.loc[missing_times, 'ERRO_VALIDACAO'] = 'Horários incompletos'
+
+    return df
+
+def create_cargo_chart(df):
+    """Create the daily cargo chart."""
+    # Agrupa por data e soma carga e correio
+    cargo_by_date = df.groupby('CALCO_DATA').agg({
+        'CARGA': 'sum',
+        'CORREIO': 'sum'
+    }).reset_index()
+    
+    # Prepara os dados no formato long para o Plotly Express
+    cargo_melted = pd.melt(
+        cargo_by_date,
+        id_vars=['CALCO_DATA'],
+        value_vars=['CARGA', 'CORREIO'],
+        var_name='Tipo',
+        value_name='Peso'
+    )
+    
+    # Cria o gráfico usando Plotly Express
+    fig = px.bar(
+        cargo_melted,
+        x='CALCO_DATA',
+        y='Peso',
+        color='Tipo',
+        title='Total Diário de Carga e Correio',
+        template="plotly_white",
+        barmode='stack',
+        text='Peso',
+        color_discrete_map={
+            'CARGA': '#712ECC',
+            'CORREIO': '#2E89CC'
+        }
+    )
+    
+    # Configura o layout
+    fig.update_layout(
+        plot_bgcolor='rgba(0,0,0,0)',
+        paper_bgcolor='rgba(0,0,0,0)',
+        font=dict(color='#2C3E50'),
+        title_font_color='#2C3E50',
+        xaxis_title="Data",
+        yaxis_title="Peso (kg)",
+        legend_title="Tipo"
+    )
+
+    fig.update_traces(
+        textposition='inside',
+        texttemplate='%{text:,.0f}'
+    )
+    
     return fig
 
 
@@ -180,9 +423,16 @@ def create_passengers_chart(passengers_by_date):
         x='CALCO_DATA',
         y='TOTAL_PAX',
         title='Total Diário de Passageiros',
-        template="plotly_white"
+        template="plotly_white",
+        text='TOTAL_PAX'
     )
-    fig.update_traces(marker_color='#27AE60')
+    
+    fig.update_traces(
+        marker_color='#27AE60',
+        textposition='inside',
+        texttemplate='%{text:,.0f}'
+    )
+
     fig.update_layout(
         plot_bgcolor='rgba(0,0,0,0)',
         paper_bgcolor='rgba(0,0,0,0)',
@@ -264,6 +514,9 @@ def main():
         # Validate passenger counts
         df = validate_passenger_count(df)
 
+        # Validate movement times
+        df = validate_movement_times(df)
+
         # Process the data
         operations_by_date, passengers_by_date, occupancy_by_aircraft = process_flight_data(df)
 
@@ -271,11 +524,12 @@ def main():
         geral_validation_fig, invalid_geral_flights = create_geral_validation_chart(df)
 
         # Create tabs for different visualizations
-        tab1, tab2, tab3, tab4 = st.tabs([
+        tab1, tab2, tab3, tab4, tab5 = st.tabs([
             "Operações & Passageiros", 
             "Análise de Ocupação", 
             "Validação Aviação Geral",
-            "Detalhes das Violações"
+            "Detalhes das Violações",
+             "Validação de Horários"
         ])
 
         with tab1:
@@ -299,6 +553,23 @@ def main():
             # Display operations and passengers charts
             st.plotly_chart(create_operations_chart(operations_by_date), use_container_width=True)
             st.plotly_chart(create_passengers_chart(passengers_by_date), use_container_width=True)
+            st.plotly_chart(create_cargo_chart(df), use_container_width=True)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                total_cargo = df['CARGA'].sum()
+                st.metric(
+                    "Total de Carga (kg)",
+                    f"{total_cargo:,.0f}",
+                    delta=None
+                )
+            with col2:
+                total_mail = df['CORREIO'].sum()
+                st.metric(
+                    "Total de Correio (kg)",
+                    f"{total_mail:,.0f}",
+                    delta=None
+                )
 
         with tab2:
             # Display occupancy chart
@@ -417,13 +688,41 @@ def main():
                     f"{violation_percentage:.2f}%",
                     delta=None,
                     delta_color="inverse"
+            )  
+            else:
+                st.info("Não foram encontradas violações de aviação geral.")
+
+        with tab5:
+            st.subheader('Validação de Horários de Movimento')
+            
+            # Show invalid movements
+            invalid_times = df[df['HORARIO_INVALIDO']].copy()
+            if not invalid_times.empty:
+                total_movements = len(df[df['MOVIMENTO_TIPO'].isin(['P', 'D'])])
+                invalid_count = len(invalid_times)
+                
+                st.error(f"Foram encontrados {invalid_count} movimentos com horários inválidos de um total de {total_movements} movimentos.")
+                
+                # Format datetime columns safely
+                invalid_times['CALCO_DATA'] = invalid_times['CALCO_DATA'].apply(format_date)
+                invalid_times['TOQUE_DATA'] = invalid_times['TOQUE_DATA'].apply(format_date)
+                
+                st.dataframe(
+                    invalid_times[[
+                        'CALCO_DATA', 'CALCO_HORARIO', 
+                        'TOQUE_DATA', 'TOQUE_HORARIO',
+                        'MOVIMENTO_TIPO', 'VOO_NUMERO', 
+                        'AERONAVE_OPERADOR', 'ERRO_VALIDACAO'
+                    ]].sort_values(['CALCO_DATA', 'CALCO_HORARIO']),
+                    hide_index=True
                 )
             else:
-                st.info("Não foram encontradas violações de RPE em Branco (excluindo voos Ferry e Manutenção).")
+                st.success("Não foram encontrados movimentos com horários inválidos.")
+            
 
         # Update the metrics to include RPE em Branco
         st.subheader('Estatísticas Gerais')
-        col1, col2, col3, col4, col5 = st.columns(5)
+        col1, col2, col3, col4, col5,col6 = st.columns(6)
 
         with col1:
             st.metric(
@@ -465,6 +764,23 @@ def main():
                 delta=None,
                 delta_color="inverse"
             )
+
+        with col6:
+            time_violations = df['HORARIO_INVALIDO'].sum()
+            st.metric(
+                "Horarios Inconsistentes",
+                int(time_violations),
+                delta=None,
+                delta_color="inverse"
+            )
+
+        report_text = generate_validation_report(df)
+        st.download_button(
+            label="Baixar Relatório de Validações",
+            data=report_text,
+            file_name="relatorio_validacoes.txt",
+            mime="text/plain",
+        )
 
 if __name__ == "__main__":
     # Set page config
