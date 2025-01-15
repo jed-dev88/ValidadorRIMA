@@ -679,7 +679,7 @@ def main():
 
         # Update the metrics to include RPE em Branco
         st.subheader('Estatísticas Gerais')
-        col1, col2, col3, col4, col5 = st.columns(6)
+        col1, col2, col3, col4, col5 = st.columns(5)
 
         with col1:
             st.metric(
