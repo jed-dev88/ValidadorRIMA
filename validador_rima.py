@@ -103,21 +103,6 @@ def generate_validation_report(df):
             )
     report.append("")
 
-    # 5. Validação de Horários
-    report.append("5. VALIDAÇÃO DE HORÁRIOS")
-    report.append("-" * 20)
-    time_violations = df[df['HORARIO_INVALIDO']].copy()
-    report.append(f"Total de violações: {len(time_violations)}")
-    if not time_violations.empty:
-        report.append("\nDetalhamento das violações de horário:")
-        for _, row in time_violations.iterrows():
-            report.append(
-                f"Voo: {row['VOO_NUMERO']} - "
-                f"Data: {row['CALCO_DATA'].strftime('%d/%m/%Y')} - "
-                f"Tipo: {row['MOVIMENTO_TIPO']} - "
-                f"Erro: {row['ERRO_VALIDACAO']}"
-            )
-    report.append("")
 
     # 6. Estatísticas Finais
     report.append("6. ESTATÍSTICAS FINAIS")
@@ -524,12 +509,11 @@ def main():
         geral_validation_fig, invalid_geral_flights = create_geral_validation_chart(df)
 
         # Create tabs for different visualizations
-        tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        tab1, tab2, tab3, tab4 = st.tabs([
             "Operações & Passageiros", 
             "Análise de Ocupação", 
             "Validação Aviação Geral",
             "Detalhes das Violações",
-             "Validação de Horários"
         ])
 
         with tab1:
@@ -691,38 +675,11 @@ def main():
             )  
             else:
                 st.info("Não foram encontradas violações de aviação geral.")
-
-        with tab5:
-            st.subheader('Validação de Horários de Movimento')
-            
-            # Show invalid movements
-            invalid_times = df[df['HORARIO_INVALIDO']].copy()
-            if not invalid_times.empty:
-                total_movements = len(df[df['MOVIMENTO_TIPO'].isin(['P', 'D'])])
-                invalid_count = len(invalid_times)
-                
-                st.error(f"Foram encontrados {invalid_count} movimentos com horários inválidos de um total de {total_movements} movimentos.")
-                
-                # Format datetime columns safely
-                invalid_times['CALCO_DATA'] = invalid_times['CALCO_DATA'].apply(format_date)
-                invalid_times['TOQUE_DATA'] = invalid_times['TOQUE_DATA'].apply(format_date)
-                
-                st.dataframe(
-                    invalid_times[[
-                        'CALCO_DATA', 'CALCO_HORARIO', 
-                        'TOQUE_DATA', 'TOQUE_HORARIO',
-                        'MOVIMENTO_TIPO', 'VOO_NUMERO', 
-                        'AERONAVE_OPERADOR', 'ERRO_VALIDACAO'
-                    ]].sort_values(['CALCO_DATA', 'CALCO_HORARIO']),
-                    hide_index=True
-                )
-            else:
-                st.success("Não foram encontrados movimentos com horários inválidos.")
             
 
         # Update the metrics to include RPE em Branco
         st.subheader('Estatísticas Gerais')
-        col1, col2, col3, col4, col5,col6 = st.columns(6)
+        col1, col2, col3, col4, col5 = st.columns(6)
 
         with col1:
             st.metric(
@@ -761,15 +718,6 @@ def main():
             st.metric(
                 "RPE em Branco",
                 int(rpe_branco_violations),
-                delta=None,
-                delta_color="inverse"
-            )
-
-        with col6:
-            time_violations = df['HORARIO_INVALIDO'].sum()
-            st.metric(
-                "Horarios Inconsistentes",
-                int(time_violations),
                 delta=None,
                 delta_color="inverse"
             )
